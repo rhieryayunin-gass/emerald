@@ -1,0 +1,25 @@
+[Unit]
+Description=RIRI EMERALD Brain API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=riri-emerald
+Group=riri-emerald
+WorkingDirectory=/opt/riri-emerald/current
+EnvironmentFile=/etc/riri-emerald/emerald.env
+ExecStart=/opt/riri-emerald/current/.venv/bin/uvicorn apps.brain_api.main:app --host 127.0.0.1 --port 8010 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/riri-emerald
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
