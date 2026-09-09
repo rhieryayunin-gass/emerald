@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS detector_events (
     broker_id TEXT NOT NULL,
     symbol TEXT NOT NULL,
     strategy_mode TEXT NOT NULL DEFAULT 'REGULAR_MISMATCH',
+    shadow_tier TEXT NOT NULL DEFAULT 'STANDARD',
     direction TEXT NOT NULL,
     confirmed INTEGER NOT NULL,
     spread_artifact INTEGER NOT NULL,
@@ -110,6 +111,8 @@ class SQLiteJournal:
                     ADD COLUMN strategy_mode TEXT NOT NULL DEFAULT 'REGULAR_MISMATCH'
                     """
                 )
+            if "shadow_tier" not in columns:
+                connection.execute("ALTER TABLE detector_events ADD COLUMN shadow_tier TEXT NOT NULL DEFAULT 'STANDARD'")
             connection.execute(
                 "UPDATE detector_events SET strategy_mode=\'ROLLOVER_REVERSAL\' "
                 "WHERE strategy_mode=\'MONDAY_GAP_REVERSAL\'"
@@ -195,6 +198,7 @@ class SQLiteJournal:
         broker_id: str,
         symbol: str,
         strategy_mode: str = "REGULAR_MISMATCH",
+        shadow_tier: str = "STANDARD",
         direction: str,
         confirmed: bool,
         spread_artifact: bool,
@@ -208,10 +212,10 @@ class SQLiteJournal:
             cursor = connection.execute(
                 """
                 INSERT INTO detector_events (
-                    event_id, broker_id, symbol, strategy_mode, direction, confirmed,
+                    event_id, broker_id, symbol, strategy_mode, shadow_tier, direction, confirmed,
                     spread_artifact, detector_version, input_hash, payload_json,
                     label_status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(event_id) DO UPDATE SET
                     confirmed=excluded.confirmed,
                     spread_artifact=excluded.spread_artifact,
@@ -226,6 +230,7 @@ class SQLiteJournal:
                     broker_id,
                     symbol,
                     strategy_mode,
+                    shadow_tier,
                     direction,
                     int(confirmed),
                     int(spread_artifact),
