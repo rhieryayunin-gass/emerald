@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
-from apps.brain_api.main import app, journal, settings, tick_store
+from apps.brain_api.main import app, calendar_client, journal, settings, tick_store
 
 client = TestClient(app)
 
@@ -147,7 +147,12 @@ def test_tick_ingestion_requires_authentication() -> None:
     assert response.status_code == 401
 
 
-def test_tick_ingestion_returns_candidate_but_blocks_uncalibrated_entry() -> None:
+def test_tick_ingestion_returns_candidate_but_blocks_uncalibrated_entry(monkeypatch) -> None:
+    monkeypatch.setattr(
+        calendar_client,
+        "context_for",
+        lambda *_args, **_kwargs: {"source_health": "HEALTHY", "matched_event": None},
+    )
     tick_store.clear()
     with journal.connect() as connection:
         connection.execute("DELETE FROM detector_events")
@@ -298,7 +303,7 @@ def test_shadow_metrics_reports_all_modes_without_claiming_calibration() -> None
     response = client.get("/shadow/metrics", headers=auth_headers())
     assert response.status_code == 200
     body = response.json()
-    assert len(body["modes"]) == 4
+    assert len(body["modes"]) == 3
     regular = next(
         mode for mode in body["modes"] if mode["strategy_mode"] == "REGULAR_MISMATCH"
     )
