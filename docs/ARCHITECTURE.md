@@ -43,7 +43,8 @@ censored outcomes atomically. This prevents spread-only moves and pre-confirmati
 prices from contaminating the future training labels.
 
 `GET /shadow/metrics` aggregates dataset maturity separately for
-REGULAR_MISMATCH, ROLLOVER_REVERSAL, NEWS_REVERSAL, and MONDAY_GAP_REVERSAL. It
+REGULAR_MISMATCH, ROLLOVER_REVERSAL, and NEWS_REVERSAL. The daily 04:00–05:00
+WIB pattern is rollover, not a Monday-only category. It
 shows the observed target rate and Wilson 95% interval, but never presents those
 descriptive values as calibrated model probability. Until a probability model
 passes independent validation, the API returns
