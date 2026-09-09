@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     news_window_after_minutes: int = 45
     rollover_window_start_minute_wib: int = 240
     rollover_window_end_minute_wib: int = 300
+    exploratory_shadow_enabled: bool = True
     expose_api_docs: bool = True
     trusted_hosts: str = "*"
 
