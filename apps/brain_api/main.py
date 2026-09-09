@@ -4,13 +4,14 @@ import json
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from emerald import __version__
-from emerald.detectors import MismatchDetector
+from emerald.detectors import DetectorConfig, MismatchDetector
 from emerald.domain import DecisionContext, StrategyMode, TradeProposal, TradeSide
 from emerald.evaluation import ShadowOutcomeLabeller, wilson_interval
 from emerald.fundamental import EconomicCalendarClient
@@ -35,6 +36,17 @@ config = RiskConfig(allow_real_trading=settings.allow_real_trading)
 risk_engine = HardRiskEngine(config)
 tick_store = TickStore()
 mismatch_detector = MismatchDetector()
+rollover_detector = MismatchDetector(DetectorConfig(
+    minimum_ticks=7, baseline_ticks=4, confirmation_ticks=2,
+    minimum_displacement_points=15.0, minimum_displacement_zscore=1.5,
+    minimum_reclaim_fraction=0.25, joint_quote_move_ratio=0.35,
+    maximum_spread_expansion_ratio=6.0,
+))
+exploratory_detector = MismatchDetector(DetectorConfig(
+    minimum_ticks=7, baseline_ticks=4, confirmation_ticks=2,
+    minimum_displacement_points=20.0, minimum_displacement_zscore=1.75,
+    minimum_reclaim_fraction=0.30,
+))
 outcome_labeller = ShadowOutcomeLabeller()
 journal_path = Path(settings.journal_path)
 journal_path.parent.mkdir(parents=True, exist_ok=True)
@@ -178,6 +190,18 @@ def ingest_ticks(
     window = tick_store.snapshot(payload.broker_id, symbol)
     analysis_window = window[-mismatch_detector.config.minimum_ticks :]
     result = mismatch_detector.detect(analysis_window, payload.point)
+    shadow_tier = "STANDARD"
+    if result.candidate is not None:
+        jakarta = result.candidate.extreme_time.astimezone(ZoneInfo("Asia/Jakarta"))
+        minute = jakarta.hour * 60 + jakarta.minute
+        if settings.rollover_window_start_minute_wib <= minute < settings.rollover_window_end_minute_wib:
+            analysis_window = window[-rollover_detector.config.minimum_ticks :]
+            result = rollover_detector.detect(analysis_window, payload.point)
+            shadow_tier = "ROLLOVER_EXPLORATORY"
+        elif settings.exploratory_shadow_enabled and not result.candidate.reversal_confirmed:
+            analysis_window = window[-exploratory_detector.config.minimum_ticks :]
+            result = exploratory_detector.detect(analysis_window, payload.point)
+            shadow_tier = "EXPLORATORY"
     event_recorded = False
     if result.candidate is not None:
         candidate_payload = asdict(result.candidate)
@@ -207,10 +231,11 @@ def ingest_ticks(
             broker_id=payload.broker_id,
             symbol=symbol,
             strategy_mode=strategy_mode.value,
+            shadow_tier=shadow_tier,
             direction=result.candidate.direction.value,
             confirmed=result.candidate.reversal_confirmed,
             spread_artifact=result.candidate.spread_artifact,
-            detector_version="mismatch-v0.3.0",
+            detector_version="mismatch-v0.4.0",
             input_hash=hashlib.sha256(input_json.encode()).hexdigest(),
             payload=candidate_payload,
             label_status="PENDING" if result.candidate.reversal_confirmed else "FILTERED",

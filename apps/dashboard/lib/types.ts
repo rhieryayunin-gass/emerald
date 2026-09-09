@@ -81,6 +81,7 @@ export type ShadowEvent = {
   broker_id: string;
   symbol: string;
   strategy_mode: string;
+  shadow_tier: string;
   direction: string;
   confirmed: number;
   spread_artifact: number;

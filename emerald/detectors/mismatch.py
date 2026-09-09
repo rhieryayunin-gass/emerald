@@ -12,12 +12,12 @@ from emerald.market import TickQuote
 
 @dataclass(frozen=True, slots=True)
 class DetectorConfig:
-    minimum_ticks: int = 14
-    baseline_ticks: int = 8
-    confirmation_ticks: int = 3
-    minimum_displacement_points: float = 50.0
-    minimum_displacement_zscore: float = 4.0
-    minimum_reclaim_fraction: float = 0.55
+    minimum_ticks: int = 9
+    baseline_ticks: int = 6
+    confirmation_ticks: int = 2
+    minimum_displacement_points: float = 30.0
+    minimum_displacement_zscore: float = 2.5
+    minimum_reclaim_fraction: float = 0.40
     joint_quote_move_ratio: float = 0.45
     maximum_spread_expansion_ratio: float = 4.0
     invalidation_buffer_points: float = 20.0

@@ -67,7 +67,7 @@ function EventRow({ event }: { event: ShadowEvent }) {
   return (
     <tr>
       <td>{formatJakarta(event.created_at)}</td>
-      <td>{modeLabels[event.strategy_mode] ?? event.strategy_mode}</td>
+      <td>{modeLabels[event.strategy_mode] ?? event.strategy_mode}<br /><small>{event.shadow_tier}</small></td>
       <td><span className={`direction ${event.direction.toLowerCase()}`}>{event.direction}</span></td>
       <td><span className={`label ${event.label_status.toLowerCase()}`}>{event.label_status}</span></td>
       <td>{event.detector_version}</td>
