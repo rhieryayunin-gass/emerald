@@ -13,9 +13,11 @@ from emerald import __version__
 from emerald.detectors import MismatchDetector
 from emerald.domain import DecisionContext, StrategyMode, TradeProposal, TradeSide
 from emerald.evaluation import ShadowOutcomeLabeller, wilson_interval
+from emerald.fundamental import EconomicCalendarClient
 from emerald.journal import SQLiteJournal
 from emerald.market import TickQuote, TickStore
 from emerald.risk import HardRiskEngine, RiskConfig
+from emerald.strategies import StrategyClassifier
 
 from .schemas import ExecutorHeartbeatPayload, TickBatchPayload
 from .settings import Settings
@@ -38,6 +40,15 @@ journal_path = Path(settings.journal_path)
 journal_path.parent.mkdir(parents=True, exist_ok=True)
 journal = SQLiteJournal(journal_path)
 journal.initialize()
+calendar_client = EconomicCalendarClient(
+    url=settings.news_calendar_url,
+    refresh_seconds=settings.news_calendar_refresh_seconds,
+    timeout_seconds=settings.news_calendar_timeout_seconds,
+)
+strategy_classifier = StrategyClassifier(
+    morning_start_minute=settings.rollover_window_start_minute_wib,
+    morning_end_minute=settings.rollover_window_end_minute_wib,
+)
 
 
 def require_api_token(authorization: str | None) -> None:
@@ -170,6 +181,16 @@ def ingest_ticks(
     event_recorded = False
     if result.candidate is not None:
         candidate_payload = asdict(result.candidate)
+        news_context = calendar_client.context_for(
+            result.candidate.extreme_time,
+            before_minutes=settings.news_window_before_minutes,
+            after_minutes=settings.news_window_after_minutes,
+        )
+        strategy_mode, classification = strategy_classifier.classify(
+            event_time=result.candidate.extreme_time,
+            news_context=news_context,
+        )
+        candidate_payload["classification"] = classification
         event_key = (
             f"{payload.broker_id.casefold()}|{symbol}|"
             f"{result.candidate.direction}|{result.candidate.extreme_time.isoformat()}"
@@ -185,10 +206,11 @@ def ingest_ticks(
             event_id=event_id,
             broker_id=payload.broker_id,
             symbol=symbol,
+            strategy_mode=strategy_mode.value,
             direction=result.candidate.direction.value,
             confirmed=result.candidate.reversal_confirmed,
             spread_artifact=result.candidate.spread_artifact,
-            detector_version="mismatch-v0.1.0",
+            detector_version="mismatch-v0.3.0",
             input_hash=hashlib.sha256(input_json.encode()).hexdigest(),
             payload=candidate_payload,
             label_status="PENDING" if result.candidate.reversal_confirmed else "FILTERED",
@@ -393,7 +415,12 @@ def shadow_metrics(
         stop_hits = int(row.get("stop_hits") or 0)
         resolved = target_hits + stop_hits
         interval_low, interval_high = wilson_interval(target_hits, resolved)
-        sample_gate_met = resolved >= settings.minimum_calibration_samples_per_mode
+        minimum_samples = (
+            settings.minimum_calibration_samples_per_mode
+            if mode == StrategyMode.REGULAR_MISMATCH.value
+            else settings.special_minimum_calibration_samples
+        )
+        sample_gate_met = resolved >= minimum_samples
         all_sample_gates_met = all_sample_gates_met and sample_gate_met
         modes.append(
             {
@@ -408,7 +435,7 @@ def shadow_metrics(
                 "resolved_outcomes": resolved,
                 "observed_target_rate": round(target_hits / resolved, 6) if resolved else None,
                 "wilson_95_interval": [interval_low, interval_high],
-                "minimum_samples": settings.minimum_calibration_samples_per_mode,
+                "minimum_samples": minimum_samples,
                 "sample_gate_met": sample_gate_met,
             }
         )

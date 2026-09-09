@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     executor_heartbeat_max_age_seconds: float = 10.0
     tick_stream_max_age_seconds: float = 5.0
     minimum_calibration_samples_per_mode: int = 100
+    special_minimum_calibration_samples: int = 20
+    news_calendar_url: str = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+    news_calendar_refresh_seconds: int = 300
+    news_calendar_timeout_seconds: float = 3.0
+    news_window_before_minutes: int = 10
+    news_window_after_minutes: int = 45
+    rollover_window_start_minute_wib: int = 240
+    rollover_window_end_minute_wib: int = 300
     expose_api_docs: bool = True
     trusted_hosts: str = "*"
 

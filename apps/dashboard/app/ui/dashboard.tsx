@@ -9,7 +9,6 @@ const modeLabels: Record<string, string> = {
   REGULAR_MISMATCH: "Regular mismatch",
   ROLLOVER_REVERSAL: "Rollover reversal",
   NEWS_REVERSAL: "News reversal",
-  MONDAY_GAP_REVERSAL: "Monday gap",
 };
 
 function formatPercent(value: number | null): string {
@@ -186,7 +185,7 @@ export default function Dashboard() {
         </div>
         <div className="mode-grid">
           {snapshot?.metrics?.modes.map((mode) => <MetricCard key={mode.strategy_mode} metric={mode} />) ??
-            Array.from({ length: 4 }, (_, index) => <div className="mode-card skeleton" key={index} />)}
+            Array.from({ length: 3 }, (_, index) => <div className="mode-card skeleton" key={index} />)}
         </div>
       </section>
 
