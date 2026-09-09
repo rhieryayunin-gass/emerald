@@ -110,6 +110,10 @@ class SQLiteJournal:
                     ADD COLUMN strategy_mode TEXT NOT NULL DEFAULT 'REGULAR_MISMATCH'
                     """
                 )
+            connection.execute(
+                "UPDATE detector_events SET strategy_mode=\'ROLLOVER_REVERSAL\' "
+                "WHERE strategy_mode=\'MONDAY_GAP_REVERSAL\'"
+            )
 
     def record_decision(
         self,
