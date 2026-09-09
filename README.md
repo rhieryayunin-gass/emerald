@@ -54,8 +54,10 @@ expected value after trading costs.
 `GET /shadow/metrics` reports target/stop outcomes, unresolved and censored
 samples, observed target rate, and a Wilson 95% interval for each strategy mode.
 These descriptive dataset metrics are explicitly not treated as calibrated
-probabilities. Each mode has a configurable minimum sample gate (100 resolved
-outcomes by default), and passing that gate still does not enable trading unless
+probabilities. Regular mismatch requires 100 resolved outcomes; rollover and
+news reversal each require 20. The Monday-gap category is removed because the
+documented pattern is the daily 04:00–05:00 WIB rollover window. Passing a
+sample gate still does not enable trading unless
 the separately validated probability model is explicitly marked ready.
 
 The Windows demo executor is `apps/mt5/RIRI_EMERALD_DEMO_v1_202.mq5`. It is a new
