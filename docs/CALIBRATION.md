@@ -127,3 +127,31 @@ or the exact live fill latency. Calibration is therefore an initial model evalua
 not a substitute for execution validation. Pending/censored historical opportunities
 are reported and block affected cohorts to avoid selecting only quickly resolved
 outcomes. Existing shadow collection can continue as monitoring after this phase.
+
+## Market-time integrity gate
+
+A resolved outcome whose market timestamp is more than five seconds after the
+backend `labelled_at` timestamp is excluded as `MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK`.
+A historical date alone does not establish clock correctness. The report includes
+raw resolved counts and separate invalid-reason counts, and the dashboard displays
+the clock problem. Five seconds allows rounding/clock jitter, not timezone offsets.
+
+Do not silently subtract a fixed number of hours from the original journal or
+relabel news/rollover cohorts: the permissive detector used at that time was also
+selected by that faulty clock. Preserve those rows for audit. Deploy API v0.5 and
+EA v1.203 to produce UTC-normalized observations before assessing a new cohort.
+The UTC version tag separates the new detector inputs from the legacy model data.
+
+The API rejects timestamps ahead of server reception/acquisition before storing
+or labelling anything. Quote freshness uses both event time and acquisition time,
+so reading a backlog cannot make an old price healthy. A calendar event must be
+released, high-impact USD, and from a fresh healthy feed before it receives a
+NEWS_REVERSAL label. Pre-release calendar information remains in context evidence.
+
+Calibration results can reject a strategy even with ample raw records. Review
+reward/stop geometry and outcomes after costs before changing a probability gate.
+Do not repeatedly tune against the same final holdout or present rejected models
+as an automatic transition to demo entries.
+
+The artifact schema is `emerald-calibration-v2`. Earlier reports must be rerun;
+they cannot prove that market/label clock integrity was checked.

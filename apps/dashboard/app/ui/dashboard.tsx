@@ -17,6 +17,7 @@ const calibrationReasons: Record<string, string> = {
   NONPOSITIVE_VALIDATION_EXPECTANCY: "Hasil rata-rata setelah biaya belum positif",
   UNCERTAIN_EXPECTANCY_AFTER_COSTS: "Keuntungan setelah biaya belum cukup meyakinkan",
   EXECUTION_COSTS_NOT_CONFIGURED: "Asumsi komisi dan slippage belum diisi",
+  MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK: "Waktu harga mendahului waktu pencatatan hasil. Sampel ini ditolak karena sesi rollover/news belum dapat dipercaya. Perbarui EA dan periksa jam Windows.",
 };
 
 const modeLabels: Record<string, string> = {
@@ -219,6 +220,11 @@ export default function Dashboard() {
               {" "}{snapshot.calibration.audit?.total_rows ?? 0} catatan ·
               {" "}{snapshot.calibration.eligible_cohorts ?? 0} kelompok lolos</p>
             <p className="muted">Hasil ini tidak mengaktifkan order. Eksekusi EA dan kontrol risiko akun harus siap terlebih dahulu.</p>
+            {snapshot.calibration.blockers.includes("MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK") ? (
+              <p className="calibration-reasons" role="alert">
+                {calibrationReasons.MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK}
+              </p>
+            ) : null}
             <a className="ghost-button" href="/api/calibration/report">Unduh laporan kalibrasi</a>
             <div className="mode-grid calibration-grid">
               {snapshot.calibration.cohorts.map((item) => (
@@ -305,4 +311,3 @@ export default function Dashboard() {
     </main>
   );
 }
-

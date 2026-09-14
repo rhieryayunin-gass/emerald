@@ -228,6 +228,27 @@ def test_pre_news_release_cannot_be_used_as_news_reversal():
     assert not prepare(rows, datetime.now(UTC))[0]
 
 
+def test_broker_clock_mislabelled_as_utc_is_rejected_even_for_past_events():
+    rows = shadow_rows(20)
+    for row in rows:
+        row["labelled_at"] = (
+            datetime.fromisoformat(row["labelled_at"]) - timedelta(hours=3)
+        ).isoformat()
+    report = report_for(rows)
+    assert report["eligible_cohorts"] == 0
+    assert report["audit"]["usable_samples"] == 0
+    assert report["audit"]["invalid_resolved_reasons"]["MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK"] == 20
+    assert report["data_quality_blockers"] == ["MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK"]
+
+
+def test_subsecond_receipt_clock_rounding_is_tolerated():
+    rows = shadow_rows(1)
+    rows[0]["labelled_at"] = (
+        datetime.fromisoformat(rows[0]["labelled_at"]) - timedelta(milliseconds=800)
+    ).isoformat()
+    assert len(prepare(rows, datetime.now(UTC))[0]) == 1
+
+
 def test_atomic_report_checksum_expiry_and_status_fail_closed(tmp_path):
     path = tmp_path / "latest.json"
     assert calibration_status(path)["status"] == "NOT_RUN"
@@ -326,3 +347,13 @@ def test_readonly_database_and_cli_export_no_account_tables_or_secret(tmp_path):
     exported_report = load_report(from_export / "latest.json")
     assert exported_report["dataset_sha256"] == report["dataset_sha256"]
     assert exported_report["cohorts"] == report["cohorts"]
+
+
+def test_report_without_new_clock_integrity_contract_is_not_reused(tmp_path):
+    from emerald.calibration.model import seal
+
+    report = report_for()
+    report['schema'] = 'emerald-calibration-v1'
+    path = tmp_path / 'legacy.json'
+    atomic_write(path, seal(report))
+    assert calibration_status(path)['status'] == 'INVALID_OR_EXPIRED'

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .dataset import FEATURES, cohort, features, timestamp
 
-SCHEMA = "emerald-calibration-v1"
+SCHEMA = "emerald-calibration-v2"
 
 
 def sigmoid(value: float) -> float:

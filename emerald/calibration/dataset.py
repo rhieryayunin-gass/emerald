@@ -26,6 +26,7 @@ COHORT_FIELDS = (
 )
 MODES = {"REGULAR_MISMATCH", "ROLLOVER_REVERSAL", "NEWS_REVERSAL"}
 TIERS = {"STANDARD", "EXPLORATORY", "ROLLOVER_EXPLORATORY"}
+CLOCK_TOLERANCE_SECONDS = 5.0
 
 
 def timestamp(value: object) -> datetime:
@@ -129,6 +130,8 @@ def prepare(rows: list[dict], as_of: datetime) -> tuple[list[Sample], dict, list
     """Deduplicate price episodes before the time split; labels never become features."""
     candidates = []
     rejected = Counter()
+    invalid_reasons = Counter()
+    raw_resolved = Counter()
     incomplete = []
     seen = set()
     seen_ids = set()
@@ -146,6 +149,7 @@ def prepare(rows: list[dict], as_of: datetime) -> tuple[list[Sample], dict, list
                     rejected["MALFORMED_INCOMPLETE_EVENT"] += 1
             continue
         try:
+            raw_resolved[str(row.get("strategy_mode", "UNKNOWN"))] += 1
             key = cohort(row)
             if row["confirmed"] != 1 or row["spread_artifact"] != 0:
                 raise ValueError("unconfirmed or spread artifact")
@@ -160,7 +164,12 @@ def prepare(rows: list[dict], as_of: datetime) -> tuple[list[Sample], dict, list
                 raise ValueError("inconsistent label identity")
             start = timestamp(payload["confirmed_at"])
             end = timestamp(outcome["resolved_at"])
-            available = max(end, timestamp(row["labelled_at"]))
+            labelled = timestamp(row["labelled_at"])
+            # A backend cannot know an outcome hours before its market timestamp.
+            # Never silently shift historical broker clocks or pool their session labels.
+            if (end - labelled).total_seconds() > CLOCK_TOLERANCE_SECONDS:
+                raise ValueError("MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK")
+            available = max(end, labelled)
             if (
                 end <= start
                 or available > as_of
@@ -217,8 +226,11 @@ def prepare(rows: list[dict], as_of: datetime) -> tuple[list[Sample], dict, list
                     pnl,
                 )
             )
-        except (KeyError, ValueError, TypeError, OverflowError):
+        except (KeyError, ValueError, TypeError, OverflowError) as error:
             rejected["INVALID_RESOLVED_EVENT"] += 1
+            # Only our validation messages are retained, never input payloads or secrets.
+            reason = str(error) if type(error) is ValueError else type(error).__name__
+            invalid_reasons[reason if reason == "MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK" else "MALFORMED_OR_INCONSISTENT_EVENT"] += 1
     # Use the first signal in an overlapping broker/symbol episode, across tiers and sides.
     # Counts therefore represent separate opportunities, not repeated ticks of one spike.
     samples = []
@@ -236,6 +248,8 @@ def prepare(rows: list[dict], as_of: datetime) -> tuple[list[Sample], dict, list
             "total_rows": len(rows),
             "usable_samples": len(samples),
             "excluded": dict(sorted(rejected.items())),
+            "invalid_resolved_reasons": dict(sorted(invalid_reasons.items())),
+            "raw_resolved_by_mode": dict(sorted(raw_resolved.items())),
         },
         incomplete,
     )

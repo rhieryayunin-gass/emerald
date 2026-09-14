@@ -42,7 +42,8 @@ Vercel server environment variables and must never use a `NEXT_PUBLIC_` prefix.
 
 ## MT5 sequence
 
-Compile and install `apps/mt5/RIRI_EMERALD_DEMO_v1_202.mq5`, allow only the
+Compile and install `apps/mt5/RIRI_EMERALD_DEMO_v1_203.mq5`, allow only the
 dedicated HTTPS API URL, and keep AutoTrading disabled during the first telemetry
 verification. Entry remains technically unavailable while
 `EMERALD_PROBABILITY_MODEL_READY=false`.
+

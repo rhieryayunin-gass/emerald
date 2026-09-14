@@ -173,6 +173,25 @@ def ingest_ticks(
     symbols = {tick.symbol.strip().upper() for tick in payload.ticks}
     if len(symbols) != 1:
         raise HTTPException(status_code=422, detail="one batch must contain exactly one symbol")
+    received_at = datetime.now(UTC)
+    clock_incident_id = hashlib.sha256(
+        f"market-clock|{payload.broker_id.casefold()}|{next(iter(symbols))}".encode()
+    ).hexdigest()
+    ahead_seconds = max(
+        max((tick.broker_time - received_at).total_seconds(),
+            (tick.observed_at - received_at).total_seconds(),
+            (tick.broker_time - tick.observed_at).total_seconds())
+        for tick in payload.ticks
+    )
+    if ahead_seconds > 5.0:
+        journal.upsert_incident(
+            incident_id=clock_incident_id, severity="ERROR", component="MARKET_DATA",
+            code="MARKET_TIMESTAMP_AHEAD_OF_SERVER",
+            details={"ahead_seconds": round(ahead_seconds, 3),
+                     "timestamp_contract": payload.timestamp_contract,
+                     "action": "Install EMERALD EA v1.203 and synchronize Windows time."},
+        )
+        raise HTTPException(status_code=422, detail="MARKET_TIMESTAMP_AHEAD_OF_SERVER")
     quotes = [
         TickQuote(
             symbol=tick.symbol,
@@ -188,6 +207,8 @@ def ingest_ticks(
         accepted = tick_store.append_many(payload.broker_id, quotes)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    if accepted:
+        journal.resolve_incident(clock_incident_id)
 
     symbol = next(iter(symbols))
     outcomes_labelled = label_pending_shadow_events(
@@ -227,13 +248,17 @@ def ingest_ticks(
         candidate_payload["classification"] = classification
         candidate_payload["point"] = payload.point
         candidate_payload["shadow_tier"] = shadow_tier
+        candidate_payload["timestamp_contract"] = payload.timestamp_contract or "legacy"
+        candidate_payload["broker_utc_offset_seconds"] = payload.broker_utc_offset_seconds
+        candidate_payload["received_at"] = received_at.isoformat()
+        detector_version = "mismatch-v0.5.0-utc" if payload.timestamp_contract else "mismatch-v0.4.0"
         if calibration_report_path.is_file():
             try:
                 probability_assessment = evaluate_event(load_report(calibration_report_path), {
                     "broker_id": payload.broker_id, "symbol": symbol,
                     "strategy_mode": strategy_mode.value, "shadow_tier": shadow_tier,
                     "direction": result.candidate.direction.value,
-                    "detector_version": "mismatch-v0.4.0", "payload": candidate_payload,
+                    "detector_version": detector_version, "payload": candidate_payload,
                 }, point=payload.point)
             except (ValueError, OSError, KeyError, TypeError, OverflowError):
                 probability_assessment = {"status": "MODEL_UNAVAILABLE", "model_gate_passed": False}
@@ -257,7 +282,7 @@ def ingest_ticks(
             direction=result.candidate.direction.value,
             confirmed=result.candidate.reversal_confirmed,
             spread_artifact=result.candidate.spread_artifact,
-            detector_version="mismatch-v0.4.0",
+            detector_version=detector_version,
             input_hash=hashlib.sha256(input_json.encode()).hexdigest(),
             payload=candidate_payload,
             label_status="PENDING" if result.candidate.reversal_confirmed else "FILTERED",
@@ -383,9 +408,15 @@ def telemetry_readiness(
         observed_at = stream["latest_observed_at"]
         if not isinstance(observed_at, datetime):
             continue
-        age_seconds = max(0.0, (now - observed_at.astimezone(UTC)).total_seconds())
+        broker_time = stream["latest_broker_time"]
+        if not isinstance(broker_time, datetime):
+            continue
+        observed_age = (now - observed_at.astimezone(UTC)).total_seconds()
+        broker_age = (now - broker_time.astimezone(UTC)).total_seconds()
+        age_seconds = max(observed_age, broker_age)
         healthy = (
             str(stream["symbol"]).upper() == settings.expected_symbol
+            and min(observed_age, broker_age) >= -5.0
             and age_seconds <= settings.tick_stream_max_age_seconds
         )
         stream_healthy = stream_healthy or healthy

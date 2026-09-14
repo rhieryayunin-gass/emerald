@@ -232,6 +232,11 @@ def build_report(rows: list[dict], dataset_sha: str, now: datetime, cost: float 
             "cohorts": cohorts,
             "eligible_cohorts": eligible,
             "status": "DEMO_REVIEW_READY" if eligible else "REJECTED",
+            "data_quality_blockers": (
+                ["MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK"]
+                if audit["invalid_resolved_reasons"].get("MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK")
+                else []
+            ),
             "missing_modes": sorted(
                 {"REGULAR_MISMATCH", "ROLLOVER_REVERSAL", "NEWS_REVERSAL"}
                 - {key[2] for key in groups}

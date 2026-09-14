@@ -25,7 +25,7 @@ server time and may change.
 
 1. Log in to the dedicated MetaQuotes demo account in MT5.
 2. Open an XAUUSD chart and confirm the account is hedging with leverage 1:200.
-3. Open MetaEditor and compile `RIRI_EMERALD_DEMO_v1_202.mq5`. The build must
+3. Open MetaEditor and compile `RIRI_EMERALD_DEMO_v1_203.mq5`. The build must
    report `code generated` and zero errors.
 4. In MT5, open Tools > Options > Expert Advisors and add
    `https://api-emerald.albiagent.com` to the allowed WebRequest URLs.
@@ -43,3 +43,4 @@ server time and may change.
 
 Never paste the MT5 password or API token into chat, source control, logs, or
 screenshots.
+

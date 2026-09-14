@@ -49,5 +49,6 @@ def calibration_status(path: Path) -> dict:
         "eligible_cohorts": report["eligible_cohorts"],
         "probability_model_ready": report["eligible_cohorts"] > 0,
         "blockers": ["EXECUTION_PROTOCOL_NOT_IMPLEMENTED"]
+        + report.get("data_quality_blockers", [])
         + ([] if report["eligible_cohorts"] else ["NO_VALIDATED_COHORT"]),
     }
