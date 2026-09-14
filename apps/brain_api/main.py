@@ -1,18 +1,21 @@
 import hashlib
 import hmac
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from emerald import __version__
+from emerald.calibration.model import evaluate_event, load_report
+from emerald.calibration.status import calibration_status
 from emerald.detectors import DetectorConfig, MismatchDetector
 from emerald.domain import DecisionContext, StrategyMode, TradeProposal, TradeSide
+from emerald.domain.enums import DecisionStatus
 from emerald.evaluation import ShadowOutcomeLabeller, wilson_interval
 from emerald.fundamental import EconomicCalendarClient
 from emerald.journal import SQLiteJournal
@@ -52,6 +55,7 @@ journal_path = Path(settings.journal_path)
 journal_path.parent.mkdir(parents=True, exist_ok=True)
 journal = SQLiteJournal(journal_path)
 journal.initialize()
+calibration_report_path = Path(settings.calibration_report_path) if settings.calibration_report_path else journal_path.parent / "calibration" / "latest.json"
 calendar_client = EconomicCalendarClient(
     url=settings.news_calendar_url,
     refresh_seconds=settings.news_calendar_refresh_seconds,
@@ -123,7 +127,7 @@ def health() -> dict[str, object]:
         "status": "ok",
         "environment": settings.environment,
         "real_trading_allowed": config.allow_real_trading,
-        "probability_model_ready": settings.probability_model_ready,
+        "probability_model_ready": calibration_status(calibration_report_path)["probability_model_ready"],
         "version": __version__,
     }
 
@@ -151,7 +155,12 @@ def evaluate_risk(
 ) -> dict[str, object]:
     """Evaluate an entry proposal using the authoritative deterministic gates."""
     require_api_token(authorization)
-    return asdict(risk_engine.evaluate(proposal, context))
+    approval = risk_engine.evaluate(proposal, context)
+    # No caller-controlled probability or legacy env flag can enable an unfinished executor.
+    approval = replace(approval, approved=False, status=DecisionStatus.REJECTED,
+                       approved_risk_fraction=0.0, approved_lot=0.0,
+                       reasons=approval.reasons + ("EXECUTION_PROTOCOL_NOT_IMPLEMENTED",))
+    return asdict(approval)
 
 
 @app.post("/market/ticks")
@@ -203,6 +212,7 @@ def ingest_ticks(
             result = exploratory_detector.detect(analysis_window, payload.point)
             shadow_tier = "EXPLORATORY"
     event_recorded = False
+    probability_assessment = None
     if result.candidate is not None:
         candidate_payload = asdict(result.candidate)
         news_context = calendar_client.context_for(
@@ -215,6 +225,18 @@ def ingest_ticks(
             news_context=news_context,
         )
         candidate_payload["classification"] = classification
+        candidate_payload["point"] = payload.point
+        candidate_payload["shadow_tier"] = shadow_tier
+        if calibration_report_path.is_file():
+            try:
+                probability_assessment = evaluate_event(load_report(calibration_report_path), {
+                    "broker_id": payload.broker_id, "symbol": symbol,
+                    "strategy_mode": strategy_mode.value, "shadow_tier": shadow_tier,
+                    "direction": result.candidate.direction.value,
+                    "detector_version": "mismatch-v0.4.0", "payload": candidate_payload,
+                }, point=payload.point)
+            except (ValueError, OSError, KeyError, TypeError, OverflowError):
+                probability_assessment = {"status": "MODEL_UNAVAILABLE", "model_gate_passed": False}
         event_key = (
             f"{payload.broker_id.casefold()}|{symbol}|"
             f"{result.candidate.direction}|{result.candidate.extreme_time.isoformat()}"
@@ -244,7 +266,8 @@ def ingest_ticks(
         "accepted_ticks": accepted,
         "stored_ticks": len(window),
         "detector": asdict(result),
-        "probability_status": "NOT_CALIBRATED",
+        "probability_status": probability_assessment["status"] if probability_assessment else "NOT_CALIBRATED",
+        "probability_assessment": probability_assessment,
         "entry_eligible": False,
         "shadow_event_recorded": event_recorded,
         "shadow_outcomes_labelled": outcomes_labelled,
@@ -304,11 +327,8 @@ def executor_heartbeat(
         "account_login": payload.account_login,
         "system_state": payload.system_state,
         "executor_healthy": healthy,
-        "new_entries_allowed": (
-            healthy
-            and settings.environment == "demo"
-            and settings.probability_model_ready
-        ),
+        "new_entries_allowed": False,
+        "entry_blocker": "EXECUTION_PROTOCOL_NOT_IMPLEMENTED",
     }
 
 
@@ -389,12 +409,13 @@ def telemetry_readiness(
     elif not stream_healthy:
         blockers.append("TICK_STREAM_NOT_HEALTHY")
     telemetry_ready = executor_healthy and stream_healthy
-    if not settings.probability_model_ready:
+    if not calibration_status(calibration_report_path)["probability_model_ready"]:
         blockers.append("PROBABILITY_MODEL_NOT_READY")
+    blockers.append("EXECUTION_PROTOCOL_NOT_IMPLEMENTED")
 
     return {
         "telemetry_ready": telemetry_ready,
-        "entry_ready": telemetry_ready and settings.probability_model_ready,
+        "entry_ready": False,
         "blockers": blockers,
         "expected_profile": {
             "server": settings.expected_account_server,
@@ -467,8 +488,8 @@ def shadow_metrics(
     return {
         "modes": modes,
         "all_sample_gates_met": all_sample_gates_met,
-        "probability_model_ready": settings.probability_model_ready,
-        "calibration_ready": all_sample_gates_met and settings.probability_model_ready,
+        "probability_model_ready": calibration_status(calibration_report_path)["probability_model_ready"],
+        "calibration_ready": calibration_status(calibration_report_path)["probability_model_ready"],
         "notice": "Observed outcomes and confidence intervals are not calibrated probabilities.",
     }
 
@@ -483,3 +504,24 @@ def incidents(
     for row in rows:
         row["details"] = json.loads(row.pop("details_json"))
     return {"incidents": rows, "count": len(rows)}
+
+
+@app.get("/calibration/status")
+def get_calibration_status(
+    authorization: Annotated[str | None, Header()] = None,
+) -> dict[str, object]:
+    require_api_token(authorization)
+    return calibration_status(calibration_report_path)
+
+
+@app.get("/calibration/report")
+def get_calibration_report(
+    authorization: Annotated[str | None, Header()] = None,
+) -> dict[str, object]:
+    require_api_token(authorization)
+    try:
+        return load_report(calibration_report_path)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="calibration has not run") from error
+    except (ValueError, OSError, KeyError, TypeError, OverflowError) as error:
+        raise HTTPException(status_code=409, detail="calibration report invalid or expired") from error

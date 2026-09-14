@@ -33,6 +33,10 @@ install -d -o root -g root -m 0755 "${release_dir}"
 rsync -a --delete \
   --exclude '.git/' \
   --exclude '.env' \
+  --exclude '.env.local' \
+  --exclude '.env.*.local' \
+  --exclude '.vercel/' \
+  --exclude 'calibration-artifacts/' \
   --exclude '.venv/' \
   --exclude 'data/' \
   --exclude 'apps/dashboard/node_modules/' \
@@ -61,3 +65,4 @@ done
 
 echo "EMERALD health check failed. Inspect: journalctl -u riri-emerald-api -n 100" >&2
 exit 1
+

@@ -217,6 +217,8 @@ class SQLiteJournal:
                     label_status, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(event_id) DO UPDATE SET
+                    strategy_mode=excluded.strategy_mode,
+                    shadow_tier=excluded.shadow_tier,
                     confirmed=excluded.confirmed,
                     spread_artifact=excluded.spread_artifact,
                     detector_version=excluded.detector_version,
@@ -410,3 +412,4 @@ class SQLiteJournal:
                 """,
                 (now_iso(), incident_id),
             )
+

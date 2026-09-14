@@ -156,22 +156,8 @@ def test_tick_ingestion_returns_candidate_but_blocks_uncalibrated_entry(monkeypa
     tick_store.clear()
     with journal.connect() as connection:
         connection.execute("DELETE FROM detector_events")
-    bids = [
-        2500.00,
-        2500.01,
-        2500.00,
-        2499.99,
-        2500.00,
-        2500.01,
-        2500.00,
-        2499.99,
-        2490.00,
-        2492.00,
-        2495.00,
-        2497.00,
-        2498.00,
-        2498.50,
-    ]
+    bids = [2500.00, 2500.01, 2500.00, 2499.99, 2500.00, 2500.01,
+            2490.00, 2494.00, 2497.00]
     ticks = [
         {
             "symbol": "XAUUSD",
@@ -189,7 +175,7 @@ def test_tick_ingestion_returns_candidate_but_blocks_uncalibrated_entry(monkeypa
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["accepted_ticks"] == 14
+    assert body["accepted_ticks"] == 9
     assert body["detector"]["candidate"]["direction"] == "BUY"
     assert body["detector"]["candidate"]["reversal_confirmed"] is True
     assert body["probability_status"] == "NOT_CALIBRATED"
@@ -271,7 +257,7 @@ def test_readiness_distinguishes_telemetry_from_entry_readiness() -> None:
     ready = client.get("/telemetry/readiness", headers=auth_headers()).json()
     assert ready["telemetry_ready"] is True
     assert ready["entry_ready"] is False
-    assert ready["blockers"] == ["PROBABILITY_MODEL_NOT_READY"]
+    assert ready["blockers"] == ["PROBABILITY_MODEL_NOT_READY", "EXECUTION_PROTOCOL_NOT_IMPLEMENTED"]
 
 
 def test_readiness_requires_authentication() -> None:
@@ -319,3 +305,4 @@ def test_shadow_metrics_reports_all_modes_without_claiming_calibration() -> None
 
 def test_shadow_metrics_requires_authentication() -> None:
     assert client.get("/shadow/metrics").status_code == 401
+

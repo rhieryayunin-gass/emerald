@@ -96,9 +96,46 @@ export type ShadowEvent = {
 export type DashboardSnapshot = {
   fetched_at: string;
   health: Health | null;
+  calibration: CalibrationStatus | null;
   telemetry: TelemetryReadiness | null;
   metrics: ShadowMetrics | null;
   incidents: Incident[];
   events: ShadowEvent[];
   errors: string[];
+};
+
+
+export type CalibrationCohort = {
+  key: string[];
+  strategy_mode: string;
+  shadow_tier: string;
+  direction: string;
+  status: string;
+  usable_samples: number;
+  minimum_samples: number;
+  split_counts: { train: number; calibration: number; test: number; purged: number };
+  blockers: string[];
+  validation: {
+    brier_score: number;
+    baseline_brier_score: number;
+    calibration_error: number;
+    selected_samples: number;
+    selected_target_rate: number | null;
+    mean_net_r: number | null;
+    conservative_ev_points: number | null;
+  } | null;
+};
+
+export type CalibrationStatus = {
+  status: string;
+  artifact_id?: string;
+  created_at?: string;
+  expires_at?: string;
+  probability_model_ready: boolean;
+  entry_ready: boolean;
+  audit?: { total_rows: number; usable_samples: number; excluded: Record<string, number> };
+  eligible_cohorts?: number;
+  missing_modes?: string[];
+  blockers: string[];
+  cohorts: CalibrationCohort[];
 };

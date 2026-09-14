@@ -74,3 +74,12 @@ The independent Next.js dashboard lives in `apps/dashboard`. Its server-side
 route holds the backend credential; the credential is not included in browser
 JavaScript. Dashboard access also requires its own password and signed HttpOnly
 session cookie.
+
+
+## Calibration milestone (v0.5.0)
+
+The offline runner is now available: see [Calibration](docs/CALIBRATION.md).
+It fits a probability model and separate sigmoid calibrator, validates chronological
+holdout data, and produces an audited report for the dashboard. Actual calibration
+must run against the VPS journal; fixture tests are not market results. The current
+EA has no order-entry protocol. A report cannot enable orders or real trading.

@@ -15,3 +15,8 @@ build/
 *.egg-info/
 data/
 .DS_Store
+
+
+.env.local
+.env.*.local
+calibration-artifacts/

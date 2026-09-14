@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth";
 import type {
   DashboardSnapshot,
+  CalibrationStatus,
   Health,
   Incident,
   ShadowEvent,
@@ -42,19 +43,21 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [health, telemetry, metrics, incidentPayload, eventPayload] = await Promise.all([
+  const [health, telemetry, metrics, incidentPayload, eventPayload, calibration] = await Promise.all([
     backendFetch<Health>("/health", false),
     backendFetch<TelemetryReadiness>("/telemetry/readiness"),
     backendFetch<ShadowMetrics>("/shadow/metrics"),
     backendFetch<{ incidents: Incident[] }>("/incidents"),
     backendFetch<{ events: ShadowEvent[] }>("/shadow/events?limit=50"),
+    backendFetch<CalibrationStatus>("/calibration/status"),
   ]);
-  const errors = [health, telemetry, metrics, incidentPayload, eventPayload]
+  const errors = [health, telemetry, metrics, incidentPayload, eventPayload, calibration]
     .map((result) => result.error)
     .filter((error): error is string => Boolean(error));
   const snapshot: DashboardSnapshot = {
     fetched_at: new Date().toISOString(),
     health: health.data,
+    calibration: calibration.data,
     telemetry: telemetry.data,
     metrics: metrics.data,
     incidents: incidentPayload.data?.incidents ?? [],
@@ -65,3 +68,4 @@ export async function GET() {
     headers: { "Cache-Control": "private, no-store, max-age=0" },
   });
 }
+
