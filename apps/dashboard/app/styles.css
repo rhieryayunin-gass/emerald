@@ -301,3 +301,7 @@ footer { display: flex; justify-content: space-between; padding: 22px 4px 0; col
   .quote-grid strong { font-size: 27px; }
   .login-card { padding: 27px; }
 }
+
+
+.calibration-grid { margin-top: 1.5rem; }
+.calibration-reasons { padding-left: 1.2rem; color: #c5b681; font-size: 0.85rem; line-height: 1.7; }

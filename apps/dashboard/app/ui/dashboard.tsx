@@ -5,6 +5,21 @@ import { useRouter } from "next/navigation";
 
 import type { DashboardSnapshot, ModeMetric, ShadowEvent } from "@/lib/types";
 
+const calibrationReasons: Record<string, string> = {
+  INSUFFICIENT_INDEPENDENT_SAMPLES: "Sampel peluang independen belum cukup",
+  INSUFFICIENT_TIME_SPLIT: "Data pada periode pelatihan atau pengujian belum cukup",
+  INSUFFICIENT_CLASS_COVERAGE: "Contoh target dan stop belum cukup untuk melatih model",
+  INCOMPLETE_HISTORICAL_OUTCOMES: "Ada peluang historis yang hasilnya belum lengkap",
+  NO_OUT_OF_TIME_PROBABILITY_SKILL: "Prediksi belum mengungguli pembanding pada data pengujian",
+  CALIBRATION_ERROR_ABOVE_10_PERCENT: "Selisih probabilitas dan hasil aktual masih terlalu besar",
+  INSUFFICIENT_80_PERCENT_VALIDATION_SIGNALS: "Sinyal dengan probabilitas 80% belum cukup teruji",
+  VALIDATION_TARGET_RATE_BELOW_80_PERCENT: "Hasil sinyal terpilih belum mencapai target 80%",
+  NONPOSITIVE_VALIDATION_EXPECTANCY: "Hasil rata-rata setelah biaya belum positif",
+  UNCERTAIN_EXPECTANCY_AFTER_COSTS: "Keuntungan setelah biaya belum cukup meyakinkan",
+  EXECUTION_COSTS_NOT_CONFIGURED: "Asumsi komisi dan slippage belum diisi",
+  MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK: "Waktu harga mendahului waktu pencatatan hasil. Sampel ini ditolak karena sesi rollover/news belum dapat dipercaya. Perbarui EA dan periksa jam Windows.",
+};
+
 const modeLabels: Record<string, string> = {
   REGULAR_MISMATCH: "Regular mismatch",
   ROLLOVER_REVERSAL: "Rollover reversal",
@@ -146,7 +161,7 @@ export default function Dashboard() {
             <span className={statusClass(snapshot?.telemetry?.telemetry_ready)} />
             <div>
               <h2>{snapshot?.telemetry?.telemetry_ready ? "Telemetry online" : "Waiting for MT5"}</h2>
-              <p>Entry tetap dikunci sampai probability model tervalidasi.</p>
+              <p>Kalibrasi model dan kesiapan eksekusi demo diperiksa terpisah.</p>
             </div>
           </div>
           <div className="hero-metrics">
@@ -187,6 +202,59 @@ export default function Dashboard() {
           {snapshot?.metrics?.modes.map((mode) => <MetricCard key={mode.strategy_mode} metric={mode} />) ??
             Array.from({ length: 3 }, (_, index) => <div className="mode-card skeleton" key={index} />)}
         </div>
+      </section>
+
+      <section className="section-block" aria-label="Hasil kalibrasi model">
+        <div className="section-heading">
+          <div><p className="panel-kicker">Model evaluation</p><h2>Hasil kalibrasi</h2></div>
+          <span className={statusClass(snapshot?.calibration?.probability_model_ready)}>
+            {snapshot?.calibration?.probability_model_ready ? "Siap ditinjau untuk demo" :
+              snapshot?.calibration?.status === "REJECTED" ? "Belum lolos validasi" :
+              snapshot?.calibration?.status === "INVALID_OR_EXPIRED" ? "Laporan perlu diperbarui" : "Belum dijalankan"}
+          </span>
+        </div>
+        {snapshot?.calibration?.artifact_id ? (
+          <>
+            <p className="muted">Diuji {formatJakarta(snapshot.calibration.created_at)} ·
+              {" "}{snapshot.calibration.audit?.usable_samples ?? 0} peluang independen dari
+              {" "}{snapshot.calibration.audit?.total_rows ?? 0} catatan ·
+              {" "}{snapshot.calibration.eligible_cohorts ?? 0} kelompok lolos</p>
+            <p className="muted">Hasil ini tidak mengaktifkan order. Eksekusi EA dan kontrol risiko akun harus siap terlebih dahulu.</p>
+            {snapshot.calibration.blockers.includes("MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK") ? (
+              <p className="calibration-reasons" role="alert">
+                {calibrationReasons.MARKET_CLOCK_AHEAD_OF_LABEL_CLOCK}
+              </p>
+            ) : null}
+            <a className="ghost-button" href="/api/calibration/report">Unduh laporan kalibrasi</a>
+            <div className="mode-grid calibration-grid">
+              {snapshot.calibration.cohorts.map((item) => (
+                <article className="mode-card" key={item.key.join("|")}>
+                  <h3>{modeLabels[item.strategy_mode] ?? item.strategy_mode} · {item.direction}</h3>
+                  <p className="mode-code">{item.shadow_tier}</p>
+                  <p>{item.usable_samples} / {item.minimum_samples} peluang independen</p>
+                  <p className="muted">Latih {item.split_counts.train} · Kalibrasi {item.split_counts.calibration} · Uji {item.split_counts.test}</p>
+                  {item.validation ? (
+                    <div className="risk-list">
+                      <div><span>Sinyal terpilih pada data uji</span><strong>{item.validation.selected_samples}</strong></div>
+                      <div><span>Target tercapai pada data uji</span><strong>{formatPercent(item.validation.selected_target_rate)}</strong></div>
+                      <div><span>Rata-rata hasil bersih</span><strong>{item.validation.mean_net_r === null ? "—" : `${item.validation.mean_net_r.toFixed(2)} R`}</strong></div>
+                    </div>
+                  ) : null}
+                  {item.blockers.length ? (
+                    <ul className="calibration-reasons">
+                      {item.blockers.map((reason) => <li key={reason}>{calibrationReasons[reason] ?? reason}</li>)}
+                    </ul>
+                  ) : <p className="muted">Lolos evaluasi awal untuk ditinjau pada akun demo.</p>}
+                </article>
+              ))}
+            </div>
+            {snapshot.calibration.missing_modes?.length ? (
+              <p className="muted">Belum ada sampel valid: {snapshot.calibration.missing_modes.map((mode) => modeLabels[mode] ?? mode).join(", ")}.</p>
+            ) : null}
+          </>
+        ) : <p className="muted">{snapshot?.calibration?.status === "INVALID_OR_EXPIRED"
+          ? "Laporan kalibrasi rusak atau kedaluwarsa. Jalankan ulang evaluasi; entry tetap terkunci."
+          : "Laporan akan muncul setelah kalibrasi database shadow dijalankan pada VPS."}</p>}
       </section>
 
       <section className="lower-grid">

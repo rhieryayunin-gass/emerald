@@ -14,7 +14,18 @@ class StrategyClassifier:
         self.morning_end_minute = morning_end_minute
 
     def classify(self, *, event_time: datetime, news_context: dict[str, object]) -> tuple[StrategyMode, dict[str, object]]:
-        if news_context.get("matched_event") and news_context.get("source_health") == "HEALTHY":
+        event = news_context.get("matched_event")
+        released = False
+        if isinstance(event, dict):
+            try:
+                scheduled_at = datetime.fromisoformat(str(event["scheduled_at"]))
+                released = (
+                    scheduled_at.tzinfo is not None and scheduled_at <= event_time
+                    and event.get("currency") == "USD" and event.get("impact") == "High"
+                )
+            except (KeyError, ValueError, TypeError):
+                pass
+        if released and news_context.get("fresh") is True and news_context.get("source_health") == "HEALTHY":
             return StrategyMode.NEWS_REVERSAL, {"classification": "HIGH_IMPACT_USD_NEWS", "news": news_context}
         jakarta_time = event_time.astimezone(JAKARTA)
         minute = jakarta_time.hour * 60 + jakarta_time.minute

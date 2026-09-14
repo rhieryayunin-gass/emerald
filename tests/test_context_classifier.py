@@ -5,7 +5,7 @@ from emerald.strategies import StrategyClassifier
 
 
 def healthy_context(event: CalendarEvent | None = None) -> dict[str, object]:
-    return {"source_health": "HEALTHY", "matched_event": event.evidence() if event else None}
+    return {"source_health": "HEALTHY", "fresh": True, "matched_event": event.evidence() if event else None}
 
 
 def test_high_impact_usd_news_has_priority_over_clock_window() -> None:
@@ -34,3 +34,13 @@ def test_calendar_context_matches_only_high_impact_usd_window() -> None:
     outside = client.context_for(scheduled + timedelta(minutes=46), before_minutes=10, after_minutes=45)
     assert matched["matched_event"] is not None
     assert outside["matched_event"] is None
+
+
+def test_pre_release_or_stale_calendar_does_not_label_a_news_reversal() -> None:
+    classifier = StrategyClassifier(morning_start_minute=240, morning_end_minute=300)
+    scheduled = datetime(2026, 9, 8, 12, 30, tzinfo=UTC)
+    event = CalendarEvent("cpi", "CPI", "USD", "High", scheduled, None, None, None, "test")
+    context = healthy_context(event)
+    assert classifier.classify(event_time=scheduled - timedelta(seconds=1), news_context=context)[0] == "REGULAR_MISMATCH"
+    context["fresh"] = False
+    assert classifier.classify(event_time=scheduled + timedelta(seconds=1), news_context=context)[0] == "REGULAR_MISMATCH"

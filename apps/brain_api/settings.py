@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     expected_account_server: str = "MetaQuotes-Demo"
     expected_symbol: str = "XAUUSD"
     expected_leverage: int = 200
-    probability_model_ready: bool = False
+    probability_model_ready: bool = False  # Legacy flag: never grants execution readiness.
+    calibration_report_path: str = ""
     executor_heartbeat_max_age_seconds: float = 10.0
     tick_stream_max_age_seconds: float = 5.0
     minimum_calibration_samples_per_mode: int = 100
@@ -46,3 +47,4 @@ class Settings(BaseSettings):
         env_prefix="EMERALD_",
         extra="ignore",
     )
+

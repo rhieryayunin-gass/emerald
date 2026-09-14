@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TickPayload(BaseModel):
@@ -27,7 +27,15 @@ class TickBatchPayload(BaseModel):
 
     broker_id: str = Field(min_length=1, max_length=100)
     point: float = Field(gt=0)
+    timestamp_contract: Literal["utc-v1"] | None = None
+    broker_utc_offset_seconds: int | None = Field(default=None, ge=-50400, le=50400)
     ticks: list[TickPayload] = Field(min_length=1, max_length=5000)
+
+    @model_validator(mode="after")
+    def timestamp_metadata_is_complete(self) -> "TickBatchPayload":
+        if (self.timestamp_contract is None) != (self.broker_utc_offset_seconds is None):
+            raise ValueError("timestamp contract and broker offset must be supplied together")
+        return self
 
 
 class ExecutorHeartbeatPayload(BaseModel):

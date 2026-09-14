@@ -60,7 +60,7 @@ documented pattern is the daily 04:00–05:00 WIB rollover window. Passing a
 sample gate still does not enable trading unless
 the separately validated probability model is explicitly marked ready.
 
-The Windows demo executor is `apps/mt5/RIRI_EMERALD_DEMO_v1_202.mq5`. It is a new
+The Windows demo executor is `apps/mt5/RIRI_EMERALD_DEMO_v1_203.mq5`. It is a new
 EMERALD-only implementation locked to the MetaQuotes-Demo profile documented in
 `docs/METAQUOTES_DEMO_PROFILE.md`. It contains no real-account override and no
 order-entry protocol yet; the current deployment stage is telemetry and shadow
@@ -74,3 +74,12 @@ The independent Next.js dashboard lives in `apps/dashboard`. Its server-side
 route holds the backend credential; the credential is not included in browser
 JavaScript. Dashboard access also requires its own password and signed HttpOnly
 session cookie.
+
+
+## Calibration milestone (v0.5.0)
+
+The offline runner is now available: see [Calibration](docs/CALIBRATION.md).
+It fits a probability model and separate sigmoid calibrator, validates chronological
+holdout data, and produces an audited report for the dashboard. Actual calibration
+must run against the VPS journal; fixture tests are not market results. The current
+EA has no order-entry protocol. A report cannot enable orders or real trading.
