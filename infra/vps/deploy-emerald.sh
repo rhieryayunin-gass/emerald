@@ -43,6 +43,10 @@ rsync -a --delete \
   --exclude 'apps/dashboard/.next/' \
   "${project_root}/" "${release_dir}/"
 
+# rsync -a copies the source root mode too (mktemp directories are 0700).
+# Restore traversal for the dedicated service user after copying, before activation.
+chmod 0755 "${release_dir}"
+
 cd "${release_dir}"
 uv sync --frozen --no-dev
 chown -R root:root "${release_dir}"
