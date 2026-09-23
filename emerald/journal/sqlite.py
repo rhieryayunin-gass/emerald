@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -98,7 +99,7 @@ class SQLiteJournal:
         return connection
 
     def initialize(self) -> None:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             connection.executescript(SCHEMA)
             columns = {
                 row["name"]
@@ -113,6 +114,21 @@ class SQLiteJournal:
                 )
             if "shadow_tier" not in columns:
                 connection.execute("ALTER TABLE detector_events ADD COLUMN shadow_tier TEXT NOT NULL DEFAULT 'STANDARD'")
+            # Install only after legacy column migrations. Recent/pending reads must
+            # not scan every historical JSON payload for each dashboard/tick request.
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_detector_events_recent "
+                "ON detector_events(created_at DESC)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_detector_events_pending "
+                "ON detector_events(lower(broker_id), upper(symbol), created_at) "
+                "WHERE confirmed=1 AND label_status='PENDING'"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_detector_events_metrics "
+                "ON detector_events(strategy_mode, confirmed, label_status)"
+            )
             connection.execute(
                 "UPDATE detector_events SET strategy_mode=\'ROLLOVER_REVERSAL\' "
                 "WHERE strategy_mode=\'MONDAY_GAP_REVERSAL\'"
@@ -130,7 +146,7 @@ class SQLiteJournal:
         input_hash: str,
         payload: dict[str, Any],
     ) -> None:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO decisions (
@@ -161,7 +177,7 @@ class SQLiteJournal:
         status: str,
         details: dict[str, Any],
     ) -> None:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO incidents (
@@ -181,7 +197,7 @@ class SQLiteJournal:
             )
 
     def list_open_incidents(self) -> list[dict[str, Any]]:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             rows = connection.execute(
                 """
                 SELECT * FROM incidents
@@ -208,7 +224,7 @@ class SQLiteJournal:
         label_status: str = "PENDING",
     ) -> bool:
         """Record once, or promote the same extreme from filtered to confirmed."""
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             cursor = connection.execute(
                 """
                 INSERT INTO detector_events (
@@ -248,7 +264,7 @@ class SQLiteJournal:
     def list_detector_events(self, limit: int = 100) -> list[dict[str, Any]]:
         if limit < 1 or limit > 10_000:
             raise ValueError("limit must be between 1 and 10000")
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             rows = connection.execute(
                 """
                 SELECT * FROM detector_events
@@ -265,7 +281,7 @@ class SQLiteJournal:
         broker_id: str,
         symbol: str,
     ) -> list[dict[str, Any]]:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             rows = connection.execute(
                 """
                 SELECT * FROM detector_events
@@ -286,7 +302,7 @@ class SQLiteJournal:
     ) -> bool:
         if outcome not in {"TARGET_HIT", "STOP_HIT", "CENSORED"}:
             raise ValueError("unsupported detector outcome")
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             cursor = connection.execute(
                 """
                 UPDATE detector_events
@@ -303,7 +319,7 @@ class SQLiteJournal:
         return cursor.rowcount == 1
 
     def detector_metrics_by_mode(self) -> list[dict[str, Any]]:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             rows = connection.execute(
                 """
                 SELECT
@@ -332,7 +348,7 @@ class SQLiteJournal:
         payload: dict[str, Any],
     ) -> str | None:
         """Upsert latest executor status and return its previous incident code."""
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             previous = connection.execute(
                 "SELECT incident_code FROM executor_status WHERE account_login = ?",
                 (account_login,),
@@ -362,7 +378,7 @@ class SQLiteJournal:
         return str(previous["incident_code"]) if previous else None
 
     def list_executor_statuses(self) -> list[dict[str, Any]]:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             rows = connection.execute(
                 "SELECT * FROM executor_status ORDER BY received_at DESC"
             ).fetchall()
@@ -377,7 +393,7 @@ class SQLiteJournal:
         code: str,
         details: dict[str, Any],
     ) -> None:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO incidents (
@@ -403,7 +419,7 @@ class SQLiteJournal:
             )
 
     def resolve_incident(self, incident_id: str) -> None:
-        with self.connect() as connection:
+        with closing(self.connect()) as connection, connection:
             connection.execute(
                 """
                 UPDATE incidents
@@ -412,4 +428,3 @@ class SQLiteJournal:
                 """,
                 (now_iso(), incident_id),
             )
-
