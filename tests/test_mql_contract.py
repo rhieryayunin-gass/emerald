@@ -1,6 +1,6 @@
 from pathlib import Path
 
-EA_PATH = Path("apps/mt5/RIRI_EMERALD_DEMO_v1_203.mq5")
+EA_PATH = Path("apps/mt5/RIRI_EMERALD_DEMO_v1_204.mq5")
 
 
 def ea_source() -> str:
@@ -25,7 +25,7 @@ def test_ea_has_no_real_account_override() -> None:
 def test_ea_profile_and_api_contract_are_locked() -> None:
     source = ea_source()
     for expected in (
-        '#property version   "1.203"',
+        '#property version   "1.204"',
         'InpExpectedServer                 = "MetaQuotes-Demo"',
         'InpExpectedSymbol                 = "XAUUSD"',
         "InpExpectedLeverage               = 200",

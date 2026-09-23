@@ -1,7 +1,7 @@
 # MT5 Executor
 
-`RIRI_EMERALD_DEMO_v1_203.mq5` is a new, independent EA written specifically for
-EMERALD. It does not reuse or modify the RIRI Executor. Install only v1.203 on the EMERALD demo chart. v1.202 is retained for source
+`RIRI_EMERALD_DEMO_v1_204.mq5` is a new, independent EA written specifically for
+EMERALD. It does not reuse or modify the RIRI Executor. Install only v1.204 on the EMERALD demo chart. v1.202 is retained for source
 history and has a known broker-time/UTC timestamp defect.
 
 The current build:
@@ -44,9 +44,22 @@ and must be verified on the demo terminal, including any broker DST change.
 refuses to infer an offset there. Offline source tests do not compile MQL5.
 
 Deploy the v0.5 backend, then replace the EA on the chart with a newly compiled
-v1.203. Keep the same MagicNumber and existing risk inputs; persisted risk state
+v1.204. Keep the same MagicNumber and existing risk inputs; persisted risk state
 is preserved. Keep only one EMERALD EA on the chart/account. The API rejects old
 future-dated ticks with `MARKET_TIMESTAMP_AHEAD_OF_SERVER`, visible in incidents.
 Verify that the latest broker and observed UTC times are close to real UTC,
 and that `tick_age_seconds` reflects actual freshness. New events use detector
 version `mismatch-v0.5.0-utc`; old journal rows are retained unchanged.
+
+## HTTP diagnostics in v1.204
+
+This version preserves the original WebRequest error immediately after the call,
+avoids converting an empty response array, validates UTF-8 request encoding,
+and reports transport failures separately from HTTP responses. Failure logs
+include elapsed milliseconds and request/response byte counts. Neither the API
+token nor Authorization headers are logged. The request timeout, UTC conversion,
+risk controls, and entry lock are unchanged. v1.203 remains in source history.
+
+Compile v1.204 in MetaEditor and replace the existing EMERALD chart EA; do not
+attach a second EMERALD instance. Source tests do not replace an actual MetaEditor
+compile or a live-terminal WebRequest test.
